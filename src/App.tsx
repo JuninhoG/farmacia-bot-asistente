@@ -8,16 +8,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useState, useRef, useEffect } from 'react';
-import { Send, MessageCircle, Info, X } from 'lucide-react';
-import { sendMessageToGemini, summarizeConversation } from './lib/geminiService';
+import { Send, X, MessageCircle, Hospital } from 'lucide-react';
+import { sendMessageToGemini } from './lib/geminiService';
 
 export default function App() {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    { role: 'assistant', content: '¡Hola! 👋 Soy el asistente virtual de SaltoFarma. ¿En qué puedo ayudarte hoy? Puedo informarte sobre disponibilidad de productos, nuestros horarios y más.' }
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; timestamp: string }[]>([
+    { 
+      role: 'assistant', 
+      content: 'Hola 👋, soy SaltoFarmaBot, asistente virtual de SaltoFarma.\n¿En qué idioma te gustaría ser atendido? 🇪🇸 Español 🇧🇷 Português\nEscribe solo "Español" o "Português" para continuar.', 
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,89 +31,101 @@ export default function App() {
     if (!input.trim() || isLoading) return;
     const userMessage = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, { 
+        role: 'user', 
+        content: userMessage, 
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+    }]);
     setIsLoading(true);
 
     try {
       const response = await sendMessageToGemini(messages, userMessage);
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: response, 
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+      }]);
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Lo siento, hubo un error al procesar tu solicitud. Por favor intenta de nuevo.' }]);
+      setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: 'Lo siento, hubo un error al procesar tu solicitud. Por favor intenta de nuevo.', 
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const closeConversation = async () => {
-    setIsClosing(true);
-    try {
-      const summary = await summarizeConversation(messages);
-      const whatsappUrl = `https://wa.me/595984821760?text=${encodeURIComponent(`Resumen de atención SaltoFarma:\n\n${summary}`)}`;
-      window.location.href = whatsappUrl;
-    } catch (error) {
-      console.error(error);
-      alert('Error al cerrar la atención. Por favor, intenta de nuevo.');
-      setIsClosing(false);
-    }
+  const renderContent = (content: string) => {
+    const parts = content.split('[MOSTRAR_BOTON_WHATSAPP]');
+    return (
+        <div>
+            {parts.map((part, index) => (
+                <div key={index}>
+                    {part.split('\n').map((line, i) => <p key={i} className="mb-1">{line}</p>)}
+                    {index < parts.length - 1 && (
+                        <a 
+                            href={`https://wa.me/595984821760?text=${encodeURIComponent(content.replace('[MOSTRAR_BOTON_WHATSAPP]', '').trim())}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-block mt-3 bg-[#25D366] text-white px-4 py-2 rounded-lg font-bold shadow-md hover:bg-[#20bd5a] transition-all"
+                        >
+                            📲 Solicitar Cotización en WhatsApp
+                        </a>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFB] font-sans text-slate-800 flex flex-col items-center p-4">
-      <header className="w-full max-w-2xl bg-black p-6 rounded-2xl shadow-sm border border-slate-700 flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3 text-white">
-          <img src="https://i.ibb.co/VWTjC8R1/salto-farma-png.png" alt="SaltoFarma" height="40" className="h-10" />
+    <div className="min-h-screen bg-[#f0f2f5] font-sans flex flex-col">
+      <header className="bg-white border-b border-gray-300 p-3 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <img src="https://i.ibb.co/VWTjC8R1/salto-farma-png.png" alt="SaltoFarma" className="h-10" />
+          <h1 className="text-xl font-bold text-black">SaltoFarma</h1>
         </div>
-        <button 
-          onClick={closeConversation}
-          disabled={isClosing}
-          className="px-5 py-2.5 bg-[#ff1010] text-white font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition"
-        >
-          <X className="w-4 h-4" /> {isClosing ? 'Cerrando...' : 'Finalizar Atención'}
-        </button>
       </header>
       
-      <main className="w-full max-w-2xl bg-white flex-1 p-8 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-6 overflow-y-auto mb-4">
+      <main className="flex-1 p-4 overflow-y-auto space-y-4">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`p-5 rounded-2xl max-w-[85%] ${msg.role === 'user' ? 'bg-[#ff1010] text-white rounded-tr-none shadow-md' : 'bg-slate-200 text-slate-800 rounded-tl-none border border-slate-100 shadow-sm'}`}>
-              <p className="text-sm leading-relaxed">{msg.content}</p>
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+            {msg.role === 'assistant' && (
+                <div className="w-8 h-8 rounded-full bg-slate-400 flex items-center justify-center text-white">
+                    <Hospital size={18} />
+                </div>
+            )}
+            <div className={`p-3 rounded-lg max-w-[80%] shadow ${msg.role === 'user' ? 'bg-[#25D366] text-white rounded-br-none' : 'bg-white text-slate-800 rounded-bl-none'}`}>
+              <div className="text-sm">{renderContent(msg.content)}</div>
+              <span className={`text-[10px] block mt-1 ${msg.role === 'user' ? 'text-green-50' : 'text-slate-500'}`}>{msg.timestamp}</span>
             </div>
           </div>
         ))}
-        {isLoading && (
-          <div className="text-[#ff1010] text-sm italic">SaltoFarmaBot está escribiendo...</div>
-        )}
         <div ref={chatEndRef} />
       </main>
 
-      <footer className="w-full max-w-2xl bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <div className="relative flex items-center">
+      <footer className="bg-[#f0f2f5] p-3 sticky bottom-0">
+        <div className="flex gap-2 items-center">
           <input 
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Escribe tu consulta aquí..."
-            className="w-full bg-slate-50 border-2 border-transparent focus:border-[#ff1010] rounded-xl py-4 pl-6 pr-24 text-sm outline-none transition-all"
+            className="flex-1 bg-white p-3 rounded-lg border focus:outline-none"
             disabled={isLoading}
           />
           <button 
             onClick={handleSend}
             disabled={isLoading}
-            className="absolute right-2 px-6 py-2 bg-[#ff1010] text-white rounded-xl text-xs font-bold shadow-sm hover:bg-red-700 transition-all"
+            className="p-3 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] transition"
           >
-            ENVIAR
+            <Send size={20} />
           </button>
         </div>
-        <p className="text-center text-[10px] text-slate-400 mt-4">
-          SaltoFarma · Atención al cliente virtual
-        </p>
       </footer>
-      
-      <a href="https://wa.me/595984821760" target="_blank" rel="noopener noreferrer" className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-lg hover:bg-[#20bd5a] transition-all">
-        <MessageCircle className="w-6 h-6" />
-      </a>
     </div>
   );
 }
